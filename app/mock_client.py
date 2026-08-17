@@ -49,7 +49,7 @@ class MockAPIClient:
         """Returns (status_code, json_body_or_None). Reads don't count
         against the rate limit per the spec, so no limiter here."""
         try:
-            resp = await self._client.get(f"/v1/dm/{dm_id}")
+           resp = await self._client.get(f"/v1/dm/{dm_id}", headers=self._headers())
         except httpx.RequestError as e:
             return None, {"error": "network_error", "detail": str(e)}
         try:
