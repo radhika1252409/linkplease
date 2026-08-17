@@ -142,14 +142,23 @@ class Worker:
                 await db.mark_task_retry(task_id, attempts, time.time() + backoff, "rate_limited")
                 return
 
-            if status == 400:
+           if status == 400:
                 detail = (body or {}).get("detail", "invalid_request")
+                log.warning(
+                    "DM SEND 400 | recipient=%s | comment_id=%s | idem_key=%s | body=%s",
+                    task_row["user_id"], task_row["comment_id"], idem_key, body,
+                )
                 await db.mark_task_failed(task_id, attempts, f"invalid_request: {detail}")
                 return
 
             # 500, network error, unexpected status - all retryable up to
             # MAX_SEND_ATTEMPTS.
             if attempts >= config.MAX_SEND_ATTEMPTS:
+                log.warning(
+                    "DM SEND gave up after max attempts | recipient=%s | comment_id=%s | "
+                    "idem_key=%s | last_status=%s | last_body=%s",
+                    task_row["user_id"], task_row["comment_id"], idem_key, status, body,
+                )
                 await db.mark_task_failed(task_id, attempts, f"max attempts reached, last status={status}")
                 return
 
