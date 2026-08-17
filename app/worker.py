@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import logging
 import time
@@ -121,8 +121,8 @@ class Worker:
                     await db.mark_task_cancelled(task_id, "comment deleted before send")
                     return
 
-            attempts = task_row["attempts"] + 1
-            idem_key = f"{task_row['rule_id']}:{task_row['user_id']}:{attempts}"
+            attempts_used = task_row["attempts"] + 1
+            idem_key = f"{task_row['rule_id']}:{task_row['user_id']}:{attempts_used}"
 
             await self.limiter.acquire()
             status, body, retry_after = await self.client.send_dm(
@@ -133,16 +133,23 @@ class Worker:
             )
 
             if status == 202 and body and body.get("dm_id"):
-                await db.mark_task_queued(task_id, body["dm_id"], attempts)
+                await db.mark_task_queued(task_id, body["dm_id"], attempts_used)
                 return
 
             if status == 429:
+                # A 429 means the request was never actually processed by
+                # their server - it's our fault for asking too soon, not a
+                # real delivery attempt. Don't burn the retry budget on it:
+                # retry with the same attempts count (and same idempotency
+                # key) rather than incrementing.
                 await self.limiter.penalize(retry_after or 5.0)
-                backoff = retry_after or self._backoff_seconds(attempts)
-                await db.mark_task_retry(task_id, attempts, time.time() + backoff, "rate_limited")
+                backoff = retry_after or self._backoff_seconds(task_row["attempts"] + 1)
+                await db.mark_task_retry(task_id, task_row["attempts"], time.time() + backoff, "rate_limited")
                 return
 
-           if status == 400:
+            attempts = attempts_used
+
+            if status == 400:
                 detail = (body or {}).get("detail", "invalid_request")
                 log.warning(
                     "DM SEND 400 | recipient=%s | comment_id=%s | idem_key=%s | body=%s",
