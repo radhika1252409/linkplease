@@ -132,7 +132,7 @@ class Worker:
                 idempotency_key=idem_key,
             )
 
-            if status == 202 and body and body.get("dm_id"):
+            if status in (200, 202) and body and body.get("dm_id"):
                 await db.mark_task_queued(task_id, body["dm_id"], attempts_used)
                 return
 
