@@ -50,6 +50,12 @@ async def webhook(request: Request):
     if config.VERIFY_SIGNATURES and config.PSEUDOGRAM_API_KEY:
         sig = request.headers.get("X-PseudoGram-Signature", "")
         if not verify_signature(raw_body, sig):
+            expected = hmac.new(config.PSEUDOGRAM_API_KEY.encode(), raw_body, hashlib.sha256).hexdigest()
+            log.warning(
+                "SIGNATURE MISMATCH | received_header=%r | body_len=%d | "
+                "body_preview=%r | we_computed=sha256=%s",
+                sig, len(raw_body), raw_body[:150], expected,
+            )
             raise HTTPException(status_code=401, detail="invalid signature")
 
     try:
