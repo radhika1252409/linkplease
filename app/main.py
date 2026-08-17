@@ -50,11 +50,30 @@ async def webhook(request: Request):
     if config.VERIFY_SIGNATURES and config.PSEUDOGRAM_API_KEY:
         sig = request.headers.get("X-PseudoGram-Signature", "")
         if not verify_signature(raw_body, sig):
-            expected = hmac.new(config.PSEUDOGRAM_API_KEY.encode(), raw_body, hashlib.sha256).hexdigest()
+            key = config.PSEUDOGRAM_API_KEY
+            candidates = {"full_key": key}
+            if "." in key:
+                prefix, _, suffix = key.partition(".")
+                candidates["prefix_before_dot"] = prefix
+                candidates["suffix_after_dot"] = suffix
+            try:
+                import base64 as _b64
+                candidates["base64_decoded_full"] = _b64.b64decode(key + "==").decode(errors="replace")
+            except Exception:
+                pass
+
+            provided = sig.split("=", 1)[1] if sig.startswith("sha256=") else sig
+            match_found = None
+            computed_map = {}
+            for name, candidate_secret in candidates.items():
+                computed = hmac.new(candidate_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+                computed_map[name] = computed
+                if hmac.compare_digest(computed, provided):
+                    match_found = name
+
             log.warning(
-                "SIGNATURE MISMATCH | received_header=%r | body_len=%d | "
-                "body_preview=%r | we_computed=sha256=%s",
-                sig, len(raw_body), raw_body[:150], expected,
+                "SIGNATURE MISMATCH | received=%s | match_found=%s | computed=%s",
+                provided, match_found, computed_map,
             )
             raise HTTPException(status_code=401, detail="invalid signature")
 
