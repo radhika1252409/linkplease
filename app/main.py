@@ -72,8 +72,8 @@ async def webhook(request: Request):
                     match_found = name
 
             log.warning(
-                "SIGNATURE MISMATCH | received=%s | match_found=%s | computed=%s",
-                provided, match_found, computed_map,
+                "SIGNATURE MISMATCH | received=%s | match_found=%s | computed=%s | headers=%s",
+                provided, match_found, computed_map, dict(request.headers),
             )
             raise HTTPException(status_code=401, detail="invalid signature")
 
